@@ -30,6 +30,7 @@ EndScriptData */
 #include "RBAC.h"
 #include "SpellMgr.h"
 #include "WorldSession.h"
+#include "ObjectMgr.h"
 
 class cast_commandscript : public CommandScript
 {
@@ -43,7 +44,7 @@ public:
             { "back",   rbac::RBAC_PERM_COMMAND_CAST_BACK,   false, &HandleCastBackCommand,  "" },
             { "dist",   rbac::RBAC_PERM_COMMAND_CAST_DIST,   false, &HandleCastDistCommand,  "" },
             { "self",   rbac::RBAC_PERM_COMMAND_CAST_SELF,   false, &HandleCastSelfCommand,  "" },
-            { "target", rbac::RBAC_PERM_COMMAND_CAST_TARGET, false, &HandleCastTargetCommad, "" },
+            { "target", rbac::RBAC_PERM_COMMAND_CAST_TARGET, false, &HandleCastTargetCommand, "" },
             { "dest",   rbac::RBAC_PERM_COMMAND_CAST_DEST,   false, &HandleCastDestCommand,  "" },
             { "",       rbac::RBAC_PERM_COMMAND_CAST,        false, &HandleCastCommand,      "" },
         };
@@ -172,7 +173,7 @@ public:
         float x, y, z;
         handler->GetSession()->GetPlayer()->GetClosePoint(x, y, z, dist);
 
-        handler->GetSession()->GetPlayer()->CastSpell(x, y, z, spellId, triggered);
+        handler->GetSession()->GetPlayer()->CastSpell(x, y, z, spellId);
 
         return true;
     }
@@ -197,87 +198,135 @@ public:
         return true;
     }
 
-    static bool HandleCastTargetCommad(ChatHandler* handler, char const* args)
-    {
-        Creature* caster = handler->getSelectedCreature();
-        if (!caster)
-        {
-            handler->SendSysMessage(LANG_SELECT_CHAR_OR_CREATURE);
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
+static bool HandleCastTargetCommand(ChatHandler* handler, char const* args)
+{
+ if (!*args)
+        return false;
 
-        if (!caster->GetVictim())
-        {
-            handler->SendSysMessage(LANG_SELECTED_TARGET_NOT_HAVE_VICTIM);
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
+ Player* player = handler->GetSession()->GetPlayer();
+ Player* target = player->GetSelectedPlayer();
 
-        // number or [name] Shift-click form |color|Hspell:spell_id|h[name]|h|r or Htalent form
-        uint32 spellId = handler->extractSpellIdFromLink((char*)args);
-        if (!spellId)
-            return false;
-
-        if (!CheckSpellExistsAndIsValid(handler, spellId))
-            return false;
-
-        char* triggeredStr = strtok(NULL, " ");
-        if (triggeredStr)
-        {
-            int l = strlen(triggeredStr);
-            if (strncmp(triggeredStr, "triggered", l) != 0)
-                return false;
-        }
-
-        TriggerCastFlags triggered = (triggeredStr != NULL) ? TRIGGERED_FULL_DEBUG_MASK : TRIGGERED_NONE;
-        caster->CastSpell(caster->GetVictim(), spellId, triggered);
-
-        return true;
+    if (!target) {
+        handler->SendSysMessage("Error a la hora de seleccionar objetivo.");
     }
 
-    static bool HandleCastDestCommand(ChatHandler* handler, char const* args)
+    char* arg1 = strtok((char*)args, " ");
+
+    uint32 lowguid = atoull(arg1);
+    if (!lowguid)
+        return false;
+
+    Creature* creature = handler->GetCreatureFromPlayerMapByDbGuid(lowguid);
+	if (!creature)
+		return false;
+
+    char* arg2 = strtok(NULL, "]");
+	
+
+    if (!arg1 || !arg2)
     {
-        Unit* caster = handler->getSelectedUnit();
-        if (!caster)
-        {
-            handler->SendSysMessage(LANG_SELECT_CHAR_OR_CREATURE);
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
-
-        // number or [name] Shift-click form |color|Hspell:spell_id|h[name]|h|r or Htalent form
-        uint32 spellId = handler->extractSpellIdFromLink((char*)args);
-        if (!spellId)
-            return false;
-
-        if (!CheckSpellExistsAndIsValid(handler, spellId))
-            return false;
-
-        char* posX = strtok(NULL, " ");
-        char* posY = strtok(NULL, " ");
-        char* posZ = strtok(NULL, " ");
-
-        if (!posX || !posY || !posZ)
-            return false;
-
-        float x = float(atof(posX));
-        float y = float(atof(posY));
-        float z = float(atof(posZ));
-
-        char* triggeredStr = strtok(NULL, " ");
-        if (triggeredStr)
-        {
-            int l = strlen(triggeredStr);
-            if (strncmp(triggeredStr, "triggered", l) != 0)
-                return false;
-        }
-
-        TriggerCastFlags triggered = (triggeredStr != NULL) ? TRIGGERED_FULL_DEBUG_MASK : TRIGGERED_NONE;
-        caster->CastSpell(x, y, z, spellId, triggered);
+        //Se va a la verga
+        handler->SendSysMessage("Uso incorrecto del comando. Estructura a emplear: .cast target GUID spellID");
+        return false;
+    }
+    else {
+		uint32 spellId = handler->extractSpellIdFromLink((char*)args);
+		if (!spellId)
+			return false;
+	if (!spellId)
+		return false;
+		
+         creature->CastSpell(target, spellId, false);
+        handler->SendSysMessage("Spell spawneada con éxito");
 
         return true;
-    }
+}
+}
+
+static bool HandleCastDestCommand(ChatHandler* handler, char const* args)
+{
+	if (!*args)
+		return false;
+
+	Unit* caster = handler->GetSession()->GetPlayer();
+
+	// number or [name] Shift-click form |color|Hspell:spell_id|h[name]|h|r or Htalent form
+	uint32 spellId = handler->extractSpellIdFromLink((char*)args);
+	if (!spellId)
+		return false;
+
+	if (!CheckSpellExistsAndIsValid(handler, spellId))
+		return false;
+
+	char* arg1 = strtok(NULL, " ");
+	char* arg2 = strtok(NULL, " ");
+	
+	float x, y, z, o;
+	x = caster->GetPositionX();
+	y = caster->GetPositionY();
+	z = caster->GetPositionZ();
+	o = caster->GetOrientation();
+	if (!arg1)
+	{
+		caster->CastSpell(x, y, z, spellId);
+		return true;
+	} else {
+		
+			do {
+				char* dir = arg1;
+				float value = float(atof(arg2));
+
+				switch (dir[0])
+				{
+				case 'l':
+					x = x + value;
+					//y = y + sin(o + (M_PI / 2))*value;
+					break;
+				case 'r':
+					x = x + cos(o - (M_PI / 2))*value;
+					y = y + sin(o - (M_PI / 2))*value;
+					break;
+				case 'f':
+					x = x + cosf(o)*value;
+					y = y + sinf(o)*value;
+					break;
+				case 'b':
+					x = x - cosf(o)*value;
+					y = y - sinf(o)*value;
+					break;
+				case 'u':
+					z = z + value;
+					break;
+				case 'd':
+					z = z - value;
+					break;
+				default:
+					handler->PSendSysMessage("Uso incorrecto del comando");
+					return false;
+				}
+				arg1 = strtok(NULL, " ");
+				arg2 = strtok(NULL, " ");
+			} while ((arg1 != NULL && arg2 != NULL));
+
+			Map* map = caster->GetMap();
+			uint32 id = 90493;
+			Creature* creature = Creature::CreateCreature(id, map, caster->GetPosition());
+			creature->Relocate(x, y, z);
+			creature->SaveToDB(map->GetId(), { map->GetDifficultyID() });
+			ObjectGuid::LowType db_guid = creature->GetSpawnId();
+			creature->CleanupsBeforeDelete();
+			delete creature;
+			creature = Creature::CreateCreatureFromDB(db_guid, map);
+			sObjectMgr->AddCreatureToGrid(db_guid, sObjectMgr->GetCreatureData(db_guid));
+
+			creature->CastSpell(creature, spellId, false);
+
+			creature->DeleteFromDB();
+			creature->AddObjectToRemoveList();
+			handler->SendSysMessage("Spell spawneada con éxito");
+			return true;
+	}
+		}
 };
 
 void AddSC_cast_commandscript()

@@ -53,7 +53,7 @@ public:
             { "taxinode",           rbac::RBAC_PERM_COMMAND_GO_TAXINODE,            false, &HandleGoTaxinodeCommand,                    "" },
             { "trigger",            rbac::RBAC_PERM_COMMAND_GO_TRIGGER,             false, &HandleGoTriggerCommand,                     "" },
             { "zonexy",             rbac::RBAC_PERM_COMMAND_GO_ZONEXY,              false, &HandleGoZoneXYCommand,                      "" },
-            { "xyz",                rbac::RBAC_PERM_COMMAND_GO_XYZ,                 false, &HandleGoXYZCommand,                         "" },
+            { "xyz",                rbac::RBAC_PERM_COMMAND_GO_MOVE,                false, &HandleGoXYZCommand,                         "" },
             { "bugticket",          rbac::RBAC_PERM_COMMAND_GO_BUG_TICKET,          false, &HandleGoTicketCommand<BugTicket>,           "" },
             { "complaintticket",    rbac::RBAC_PERM_COMMAND_GO_COMPLAINT_TICKET,    false, &HandleGoTicketCommand<ComplaintTicket>,     "" },
             { "suggestionticket",   rbac::RBAC_PERM_COMMAND_GO_SUGGESTION_TICKET,   false, &HandleGoTicketCommand<SuggestionTicket>,    "" },
@@ -597,7 +597,7 @@ public:
         player->TeleportTo(mapId, x, y, z, ort);
         return true;
     }
-
+	
     template<typename T>
     static bool HandleGoTicketCommand(ChatHandler* handler, char const* args)
     {

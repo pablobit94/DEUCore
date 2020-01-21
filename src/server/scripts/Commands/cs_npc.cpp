@@ -221,6 +221,7 @@ public:
             { "temp",      rbac::RBAC_PERM_COMMAND_NPC_ADD_TEMP,      false, &HandleNpcAddTempSpawnCommand,      "" },
             //{ "weapon",    rbac::RBAC_PERM_COMMAND_NPC_ADD_WEAPON,    false, &HandleNpcAddWeaponCommand,         "" },
             { "",          rbac::RBAC_PERM_COMMAND_NPC_ADD,           false, &HandleNpcAddCommand,               "" },
+			//{ "",          rbac::RBAC_PERM_COMMAND_NPC_ADD_TEXT,      false, &HandleNpcAddTextCommand,               "" },
         };
         static std::vector<ChatCommand> npcDeleteCommandTable =
         {
@@ -244,6 +245,7 @@ public:
             { "movetype",   rbac::RBAC_PERM_COMMAND_NPC_SET_MOVETYPE,  false, &HandleNpcSetMoveTypeCommand,      "" },
             { "phase",      rbac::RBAC_PERM_COMMAND_NPC_SET_PHASE,     false, &HandleNpcSetPhaseCommand,         "" },
             { "phasegroup", rbac::RBAC_PERM_COMMAND_NPC_SET_PHASE,     false, &HandleNpcSetPhaseGroup,           "" },
+            { "scale",      rbac::RBAC_PERM_COMMAND_NPC_SET_SCALE,     false, &HandleNpcSetScaleCommand,         "" },
             { "spawndist",  rbac::RBAC_PERM_COMMAND_NPC_SET_SPAWNDIST, false, &HandleNpcSetSpawnDistCommand,     "" },
             { "spawntime",  rbac::RBAC_PERM_COMMAND_NPC_SET_SPAWNTIME, false, &HandleNpcSetSpawnTimeCommand,     "" },
             { "data",       rbac::RBAC_PERM_COMMAND_NPC_SET_DATA,      false, &HandleNpcSetDataCommand,          "" },
@@ -330,6 +332,34 @@ public:
         return true;
     }
 
+    //add text to creature
+  /*  static bool HandleNpcAddTextCommand(ChatHandler* handler, char const* args)
+    {
+        if (!*args)
+            return false;
+
+        Creature* creature = handler->getSelectedCreature();
+        if (!creature)
+        {
+            handler->SendSysMessage(LANG_SELECT_CREATURE);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        creature->Say(args, LANG_UNIVERSAL);
+
+        // make some emotes
+        char lastchar = args[strlen(args) - 1];
+        switch (lastchar)
+        {
+        case '?':   creature->HandleEmoteCommand(EMOTE_ONESHOT_QUESTION);      break;
+        case '!':   creature->HandleEmoteCommand(EMOTE_ONESHOT_EXCLAMATION);   break;
+        default:    creature->HandleEmoteCommand(EMOTE_ONESHOT_TALK);          break;
+        }
+
+        return true;
+    }
+*/
     //add item in vendorlist
     static bool HandleNpcAddVendorItemCommand(ChatHandler* handler, char const* args)
     {
@@ -872,6 +902,10 @@ public:
         {
             lowguid = creature->GetSpawnId();
         }
+		
+		char* X = strtok(NULL, " ");
+        char* Y = strtok(NULL, " ");
+        char* Z = strtok(NULL, " ");
 
         float x = handler->GetSession()->GetPlayer()->GetPositionX();
         float y = handler->GetSession()->GetPlayer()->GetPositionY();
@@ -907,6 +941,7 @@ public:
         WorldDatabase.Execute(stmt);
 
         handler->PSendSysMessage(LANG_COMMAND_CREATUREMOVED);
+		creature->SendTeleportPacket(creature->GetPosition());
         return true;
     }
 
@@ -965,6 +1000,7 @@ public:
     * additional parameter: NODEL - so no waypoints are deleted, if you
     *                       change the movement type
     */
+	
     static bool HandleNpcSetMoveTypeCommand(ChatHandler* handler, char const* args)
     {
         if (!*args)
@@ -1152,6 +1188,37 @@ public:
 
         creature->SaveToDB();
 
+        return true;
+    }
+
+    static bool HandleNpcSetScaleCommand(ChatHandler* handler, const char* args)
+    {
+        if (!*args)
+            return false;
+
+        Creature* creature = handler->getSelectedCreature();
+        if (!creature)
+        {
+            handler->SendSysMessage(LANG_SELECT_CREATURE);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        float scale = (float)atof((char*)args);
+
+        if (scale <= 0.0f)
+        {
+            scale = creature->GetCreatureTemplate()->scale;
+            const_cast<CreatureData*>(creature->GetCreatureData())->size = -1.0f;
+        }
+        else
+        {
+            const_cast<CreatureData*>(creature->GetCreatureData())->size = scale;
+        }
+
+        creature->SetObjectScale(scale);
+        if (!creature->IsPet())
+            creature->SaveToDB();
         return true;
     }
 
@@ -1416,40 +1483,14 @@ public:
     //npc tame handling
     static bool HandleNpcTameCommand(ChatHandler* handler, char const* /*args*/)
     {
-        Creature* creatureTarget = handler->getSelectedCreature();
-        if (!creatureTarget || creatureTarget->IsPet())
-        {
-            handler->PSendSysMessage (LANG_SELECT_CREATURE);
-            handler->SetSentErrorMessage (true);
-            return false;
-        }
-
+		
+		Creature* creatureTarget = handler->getSelectedCreature();
         Player* player = handler->GetSession()->GetPlayer();
-
-        if (!player->GetPetGUID().IsEmpty())
-        {
-            handler->SendSysMessage (LANG_YOU_ALREADY_HAVE_PET);
-            handler->SetSentErrorMessage (true);
-            return false;
-        }
 
         CreatureTemplate const* cInfo = creatureTarget->GetCreatureTemplate();
 
-        if (!cInfo->IsTameable (player->CanTameExoticPets()))
-        {
-            handler->PSendSysMessage (LANG_CREATURE_NON_TAMEABLE, cInfo->Entry);
-            handler->SetSentErrorMessage (true);
-            return false;
-        }
-
         // Everything looks OK, create new pet
         Pet* pet = player->CreateTamedPetFrom(creatureTarget);
-        if (!pet)
-        {
-            handler->PSendSysMessage (LANG_CREATURE_NON_TAMEABLE, cInfo->Entry);
-            handler->SetSentErrorMessage (true);
-            return false;
-        }
 
         // place pet before player
         float x, y, z;
@@ -1460,10 +1501,10 @@ public:
         pet->SetReactState(REACT_DEFENSIVE);
 
         // calculate proper level
-        uint8 level = (creatureTarget->getLevel() < (player->getLevel() - 5)) ? (player->getLevel() - 5) : creatureTarget->getLevel();
+        uint8 level = (creatureTarget->getLevel() < (player->getLevel() - 0)) ? (player->getLevel() - 0) : creatureTarget->getLevel();
 
         // prepare visual effect for levelup
-        pet->SetUInt32Value(UNIT_FIELD_LEVEL, level - 1);
+        pet->SetUInt32Value(UNIT_FIELD_LEVEL, level - 0);
 
         // add to world
         pet->GetMap()->AddToMap(pet->ToCreature());
