@@ -84,6 +84,7 @@ public:
             { "distance",         rbac::RBAC_PERM_COMMAND_DISTANCE,         false, &HandleGetDistanceCommand,      "" },
             { "freeze",           rbac::RBAC_PERM_COMMAND_FREEZE,           false, &HandleFreezeCommand,           "" },
             { "gps",              rbac::RBAC_PERM_COMMAND_GPS,              false, &HandleGPSCommand,              "" },
+			{ "move",             rbac::RBAC_PERM_COMMAND_MOVE,             false, &HandleMoveCommand,              "" },
             { "guid",             rbac::RBAC_PERM_COMMAND_GUID,             false, &HandleGUIDCommand,             "" },
             { "help",             rbac::RBAC_PERM_COMMAND_HELP,              true, &HandleHelpCommand,             "" },
             { "hidearea",         rbac::RBAC_PERM_COMMAND_HIDEAREA,         false, &HandleHideAreaCommand,         "" },
@@ -306,6 +307,103 @@ public:
 
         return true;
     }
+	
+static bool HandleMoveCommand(ChatHandler* handler, char const* args)
+{
+	if (!*args)
+		return false;
+
+	Player* player = handler->GetSession()->GetPlayer();
+
+	float x, y, z, o;
+	x = player->GetPositionX();
+	y = player->GetPositionY();
+	z = player->GetPositionZ();
+	o = player->GetOrientation();
+
+	/*char* id = strtok((char*)args, " ");
+	if (!id)
+		return false;
+
+	uint32 mapId = id ? atoul(id) : player->GetMapId();
+	Map const* map = sMapMgr->CreateBaseMap(mapId);
+	z = std::max(map->GetStaticHeight(PhasingHandler::GetEmptyPhaseShift(), x, y, MAX_HEIGHT), map->GetWaterLevel(PhasingHandler::GetEmptyPhaseShift(), x, y));
+	*/
+	char* arg1 = strtok((char*)args, " ");
+	char* arg2 = strtok(NULL, " ");
+
+	// stop flight if need
+	if (player->IsInFlight())
+	{
+		player->GetMotionMaster()->MovementExpired();
+		player->CleanupAfterTaxiFlight();
+	}
+	// save only in non-flight case
+	else
+		player->SaveRecallPosition();
+	if (!arg1 || !arg2)
+	{
+		return false;
+	}
+	else {
+		do {
+			char* dir = arg1;
+			float value = float(atof(arg2));
+
+			switch (dir[0])
+			{
+			case 'l':
+			{
+				x = x + cos(o + (M_PI / 2))*value;
+				y = y + sin(o + (M_PI / 2))*value;
+				break;
+			}
+			case 'r':
+			{
+				x = x + cos(o - (M_PI / 2))*value;
+				y = y + sin(o - (M_PI / 2))*value;
+				break;
+			}
+			case 'f':
+			{
+				x = x + cosf(o)*value;
+				y = y + sinf(o)*value;
+				break;
+			}
+			case 'b':
+			{
+				x = x - cosf(o)*value;
+				y = y - sinf(o)*value;
+				break;
+			}
+			case 'u':
+			{
+				z = z + value;
+				break;
+			}
+			case 'd':
+			{
+				z = z - value;
+				break;
+			}
+			case 'o':
+			{
+				float o = value * M_PI / 180.0f + (o);
+				break;
+			}
+			default:
+				handler->SendSysMessage("Comando utilizado de forma incorrecta.");
+				return false;
+				}
+			arg1 = strtok(NULL, " ");
+			arg2 = strtok(NULL, " ");
+		} while ((arg1 != nullptr && arg2 != nullptr));
+
+		player->TeleportTo(player->GetMapId(), x, y, z, o);
+
+		return true;
+	}
+}
 
     static bool HandleAuraCommand(ChatHandler* handler, char const* args)
     {

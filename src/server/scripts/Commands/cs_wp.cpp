@@ -84,15 +84,22 @@ public:
     {
         // optional
         char* path_number = NULL;
+		char* path_number_id = NULL;
+		char* path_number_entry = NULL;
         uint32 pathid = 0;
+		uint32 id = atoi(args);
 
         if (*args)
+		{
             path_number = strtok((char*)args, " ");
-
+			path_number_id = path_number;
+			path_number = strtok(NULL, " ");
+			path_number_entry = path_number;
+		}
         uint32 point = 0;
         Creature* target = handler->getSelectedCreature();
 
-        if (!path_number)
+        if (!path_number_id)
         {
             if (target)
                 pathid = target->GetWaypointPath();
@@ -104,18 +111,18 @@ public:
 
                 uint32 maxpathid = result->Fetch()->GetInt32();
                 pathid = maxpathid+1;
-                handler->PSendSysMessage("%s%s|r", "|cff00ff00", "New path started.");
+                handler->PSendSysMessage("%s%s|r", "|cff00ff00", "Nueva ruta iniciada.");
             }
         }
         else
-            pathid = atoi(path_number);
+            pathid = atoi(path_number_id);
 
         // path_id -> ID of the Path
         // point   -> number of the waypoint (if not 0)
 
         if (!pathid)
         {
-            handler->PSendSysMessage("%s%s|r", "|cffff33ff", "Current creature haven't loaded path.");
+            handler->PSendSysMessage("%s%s|r", "|cffff33ff", "El actual NPC no tiene ruta creada.");
             return true;
         }
 
@@ -140,6 +147,83 @@ public:
         WorldDatabase.Execute(stmt);
 
         handler->PSendSysMessage("%s%s%u%s%u%s|r", "|cff00ff00", "PathID: |r|cff00ffff", pathid, "|r|cff00ff00: Waypoint |r|cff00ffff", point+1, "|r|cff00ff00 created. ");
+		
+		//  Reload Creature
+        uint32 entry = atoul(path_number_entry);
+
+       PreparedStatement* stmtcreature = WorldDatabase.GetPreparedStatement(WORLD_SEL_CREATURE_TEMPLATE);
+		stmtcreature->setUInt32(0, entry);
+		PreparedQueryResult resultcreature = WorldDatabase.Query(stmtcreature);
+
+		CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(entry);
+			
+		//Field* fields = result->Fetch();
+		//sObjectMgr->LoadCreatureTemplate(fields);
+		//sObjectMgr->CheckCreatureTemplate(cInfo);
+
+		// LOAD
+        // optional
+        ObjectGuid::LowType guidLow = UI64LIT(0);
+        Creature* targetload = handler->getSelectedCreature();
+
+        // Did player provide a path_id?
+
+        if (!targetload)
+        {
+            handler->SendSysMessage(LANG_SELECT_CREATURE);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+       if (targetload->GetEntry() == 1)
+       {
+            handler->PSendSysMessage("%s%s|r", "|cffff33ff", "You want to load path to a waypoint? Aren't you?");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        if (!pathid)
+        {
+            handler->PSendSysMessage("%s%s|r", "|cffff33ff", "No valid path number provided.");
+            return true;
+        }
+
+        guidLow = targetload->GetSpawnId();
+
+        PreparedStatement* stmtload = WorldDatabase.GetPreparedStatement(WORLD_SEL_CREATURE_ADDON_BY_GUID);
+
+        stmtload->setUInt64(0, guidLow);
+
+        PreparedQueryResult resultload = WorldDatabase.Query(stmtload);
+
+        if (resultload)
+        {
+            stmtload = WorldDatabase.GetPreparedStatement(WORLD_UPD_CREATURE_ADDON_PATH);
+
+            stmtload->setUInt32(0, pathid);
+            stmtload->setUInt64(1, guidLow);
+        }
+        else
+        {
+            stmtload = WorldDatabase.GetPreparedStatement(WORLD_INS_CREATURE_ADDON);
+
+            stmtload->setUInt64(0, guidLow);
+            stmtload->setUInt32(1, pathid);
+        }
+
+        WorldDatabase.Execute(stmtload);
+
+        stmtload = WorldDatabase.GetPreparedStatement(WORLD_UPD_CREATURE_MOVEMENT_TYPE);
+
+       stmtload->setUInt8(0, uint8(WAYPOINT_MOTION_TYPE));
+        stmtload->setUInt64(1, guidLow);
+
+        WorldDatabase.Execute(stmtload);
+        targetload->LoadPath(pathid);
+        targetload->SetDefaultMovementType(WAYPOINT_MOTION_TYPE);
+        targetload->GetMotionMaster()->Initialize();
+        targetload->Say("Path loaded.", LANG_UNIVERSAL);		
+		sWaypointMgr->ReloadPath(id);
         return true;
     }                                                           // HandleWpAddCommand
 
